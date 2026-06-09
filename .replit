@@ -1,0 +1,4 @@
+run = "uv run uvicorn webex_a2a_hello_world.app:app --host 0.0.0.0 --port 9999"
+
+[deployment]
+run = ["sh", "-c", "uv run uvicorn webex_a2a_hello_world.app:app --host 0.0.0.0 --port ${PORT:-9999}"]

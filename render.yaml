@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: webex-a2a-hello-world
+    runtime: python
+    plan: free
+    buildCommand: pip install uv && uv sync --locked
+    startCommand: uv run uvicorn webex_a2a_hello_world.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    autoDeploy: false
