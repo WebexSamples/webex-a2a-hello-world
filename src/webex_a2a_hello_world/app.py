@@ -4,7 +4,14 @@ from typing import Optional
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes import create_jsonrpc_routes
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
+from a2a.types import (
+    APIKeySecurityScheme,
+    AgentCapabilities,
+    AgentCard,
+    AgentInterface,
+    AgentSkill,
+    SecurityScheme,
+)
 from google.protobuf.json_format import MessageToDict
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -16,6 +23,16 @@ from starlette.routing import Route
 from webex_a2a_hello_world.agent_executor import HelloWorldAgentExecutor
 
 DEFAULT_MAX_REQUEST_BYTES = 65_536
+PUBLIC_SECURITY_SCHEMES = {
+    "apiKeyAuth": {
+        "apiKeySecurityScheme": {
+            "description": "API key header for A2A calls.",
+            "location": "header",
+            "name": "X-API-Key",
+        },
+    }
+}
+PUBLIC_SECURITY_REQUIREMENTS = [{"apiKeyAuth": []}]
 
 
 def _clean_base_url(value: str) -> str:
@@ -78,7 +95,7 @@ def _make_agent_card(base_url: str) -> AgentCard:
         tags=["a2a", "webex", "hello-world"],
         examples=["hello", "Say hello from my beta test"],
     )
-    return AgentCard(
+    card = AgentCard(
         name="Webex A2A Hello World",
         description=(
             "A minimal A2A sample server for Webex Developer testers who "
@@ -89,19 +106,36 @@ def _make_agent_card(base_url: str) -> AgentCard:
         default_output_modes=["text/plain"],
         capabilities=AgentCapabilities(streaming=True),
         supported_interfaces=[
-            AgentInterface(protocol_binding="JSONRPC", url=f"{_clean_base_url(base_url)}/")
+            AgentInterface(
+                protocol_binding="JSONRPC",
+                protocol_version="1.0",
+                url=f"{_clean_base_url(base_url)}/",
+            )
         ],
         skills=[skill],
     )
+    card.security_schemes["apiKeyAuth"].CopyFrom(
+        SecurityScheme(
+            api_key_security_scheme=APIKeySecurityScheme(
+                description="API key header for A2A calls.",
+                location="header",
+                name="X-API-Key",
+            )
+        )
+    )
+    return card
 
 
 def _agent_card_payload(base_url: str) -> dict:
     card = _make_agent_card(base_url)
-    return MessageToDict(
+    payload = MessageToDict(
         card,
         preserving_proto_field_name=False,
         always_print_fields_with_no_presence=False,
     )
+    payload["securitySchemes"] = PUBLIC_SECURITY_SCHEMES
+    payload["securityRequirements"] = PUBLIC_SECURITY_REQUIREMENTS
+    return payload
 
 
 async def homepage(request: Request) -> RedirectResponse:
