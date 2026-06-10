@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Low-cost AWS Lambda Function URL deployment for Webex A2A Hello World.
+
+Parameters:
+  ReservedConcurrency:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 10
+    Description: Maximum concurrent Lambda executions to limit runaway spend.
+  FunctionTimeoutSeconds:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 30
+    Description: Lambda timeout in seconds.
+  FunctionMemoryMb:
+    Type: Number
+    Default: 128
+    AllowedValues:
+      - 128
+      - 256
+      - 512
+    Description: Lambda memory size in MB.
+  MaxRequestBytes:
+    Type: Number
+    Default: 65536
+    MinValue: 1024
+    MaxValue: 1048576
+    Description: Maximum accepted POST body size.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures:
+      - arm64
+    MemorySize: !Ref FunctionMemoryMb
+    Timeout: !Ref FunctionTimeoutSeconds
+    LoggingConfig:
+      LogFormat: JSON
+    Tags:
+      Application: webex-a2a-hello-world
+      CostProfile: low-cost-beta
+      IntendedPublic: "true"
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: webex-a2a-hello-world
+      CodeUri: .
+      Handler: lambda_handler.handler
+      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      FunctionUrlConfig:
+        AuthType: NONE
+        InvokeMode: BUFFERED
+      Environment:
+        Variables:
+          MAX_REQUEST_BYTES: !Ref MaxRequestBytes
+          PYTHONPATH: /var/task/src
+      Tags:
+        IntendedPublic: "true"
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+Outputs:
+  FunctionName:
+    Description: Deployed Lambda function name.
+    Value: !Ref HelloWorldFunction
+  FunctionUrl:
+    Description: Public HTTPS URL for Webex Developer Portal A2A testing.
+    Value: !GetAtt HelloWorldFunctionUrl.FunctionUrl

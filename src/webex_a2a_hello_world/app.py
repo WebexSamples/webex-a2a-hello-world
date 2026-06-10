@@ -7,11 +7,15 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 from google.protobuf.json_format import MessageToDict
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
 from starlette.routing import Route
 
 from webex_a2a_hello_world.agent_executor import HelloWorldAgentExecutor
+
+DEFAULT_MAX_REQUEST_BYTES = 65_536
 
 
 def _clean_base_url(value: str) -> str:
@@ -39,6 +43,29 @@ def _request_base_url(request: Request) -> str:
     if forwarded_proto and forwarded_host:
         return f"{forwarded_proto}://{forwarded_host}"
     return _clean_base_url(str(request.base_url))
+
+
+def _max_request_bytes() -> int:
+    value = os.getenv("MAX_REQUEST_BYTES")
+    if not value:
+        return DEFAULT_MAX_REQUEST_BYTES
+
+    try:
+        parsed = int(value)
+    except ValueError:
+        return DEFAULT_MAX_REQUEST_BYTES
+
+    return parsed if parsed > 0 else DEFAULT_MAX_REQUEST_BYTES
+
+
+class RequestGuardMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "POST":
+            content_length = request.headers.get("content-length")
+            if content_length and int(content_length) > _max_request_bytes():
+                return JSONResponse({"detail": "Request body too large."}, status_code=413)
+
+        return await call_next(request)
 
 
 def _make_agent_card(base_url: str) -> AgentCard:
@@ -105,4 +132,4 @@ routes = [
 ]
 routes.extend(create_jsonrpc_routes(request_handler, "/"))
 
-app = Starlette(routes=routes)
+app = Starlette(routes=routes, middleware=[Middleware(RequestGuardMiddleware)])

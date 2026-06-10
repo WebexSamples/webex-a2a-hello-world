@@ -32,6 +32,61 @@ If your host does not forward its public hostname to the app, set `PUBLIC_URL` t
 - **Replit** is useful for trying and editing the sample. Depending on your Replit plan, publishing a stable public app may require a paid deployment.
 - **Render** may still show a free option in some accounts/workspaces, but use Koyeb first if Render asks for a paid plan.
 
+## Low-Cost AWS Deployment
+
+This repository includes an AWS SAM template for a low-cost Lambda Function URL deployment. The deployment uses:
+
+- AWS Lambda with the ARM64 architecture, 128 MB memory, and a 5 second timeout.
+- A public Lambda Function URL for HTTPS access from Webex Developer Portal.
+- Reserved concurrency set to `2` by default to cap concurrent execution.
+- `MAX_REQUEST_BYTES=65536` so oversized POST bodies are rejected with `413`.
+- `IntendedPublic=true` on the Lambda function because this sample serves only public hello-world data.
+
+Deploy with:
+
+```bash
+sam build --use-container
+sam deploy \
+  --stack-name webex-a2a-hello-world \
+  --region us-east-1 \
+  --resolve-s3 \
+  --capabilities CAPABILITY_IAM \
+  --no-confirm-changeset \
+  --parameter-overrides \
+    ReservedConcurrency=2 \
+    FunctionTimeoutSeconds=5 \
+    FunctionMemoryMb=128 \
+    MaxRequestBytes=65536
+```
+
+Limit CloudWatch log retention after the first deployment:
+
+```bash
+aws logs put-retention-policy \
+  --log-group-name /aws/lambda/webex-a2a-hello-world \
+  --retention-in-days 7 \
+  --region us-east-1
+```
+
+After deploy, copy the `FunctionUrl` output and confirm:
+
+```bash
+BASE_URL="${FUNCTION_URL%/}"
+curl "$BASE_URL/.well-known/agent-card.json"
+curl "$BASE_URL/healthz"
+curl \
+  -H "content-type: application/json" \
+  -H "A2A-Version: 1.0" \
+  --data '{"jsonrpc":"2.0","id":"1","method":"SendMessage","params":{"message":{"messageId":"test-message-1","role":"ROLE_USER","parts":[{"text":"hello"}]}}}' \
+  "$BASE_URL/"
+```
+
+To remove the AWS resources when testing is done:
+
+```bash
+sam delete --stack-name webex-a2a-hello-world --region us-east-1
+```
+
 ## Run Locally
 
 ```bash
